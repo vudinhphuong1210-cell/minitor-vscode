@@ -1,0 +1,66 @@
+{
+  "name": "edu-monitor",
+  "displayName": "EDU Monitor",
+  "description": "Giám sát hành vi lập trình – phân biệt code người vs code máy",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "eduMonitor.toggleHighlight",
+        "title": "EDU Monitor: Bật/Tắt highlight code người/máy"
+      },
+      {
+        "command": "eduMonitor.showLegend",
+        "title": "EDU Monitor: Xem chú thích màu sắc"
+      },
+      {
+        "command": "eduMonitor.clearHighlights",
+        "title": "EDU Monitor: Xoá toàn bộ highlight"
+      },
+      {
+        "command": "eduMonitor.login",
+        "title": "EDU Monitor: Đăng nhập"
+      }
+    ],
+    "configuration": {
+      "title": "EDU Monitor",
+      "properties": {
+        "eduMonitor.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "URL của EDU Monitor API server"
+        },
+        "eduMonitor.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Bật/tắt giám sát"
+        },
+        "eduMonitor.highlightEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Bật/tắt highlight phân biệt code người/máy"
+        },
+        "eduMonitor.batchIntervalMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "Chu kỳ gửi event log về server (ms)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/vscode": "^1.85.0",
+    "typescript": "5.4.5"
+  }
+}

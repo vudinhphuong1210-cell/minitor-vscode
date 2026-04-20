@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+out/
+dist/
+build/
+**/out/
+**/dist/
+
+# Environment variables (chứa secrets)
+.env
+# .env.example được giữ lại để tham khảo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code extension packaging
+*.vsix
+
+# Docker volumes / data
+postgres-data/
+rabbitmq-data/
+redis-data/
