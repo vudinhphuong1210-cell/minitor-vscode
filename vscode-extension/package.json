@@ -3,11 +3,32 @@
   "displayName": "EDU Monitor",
   "description": "Giám sát hành vi lập trình – phân biệt code người vs code máy",
   "version": "0.1.0",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other", "AI"],
+  "enabledApiProposals": [
+    "defaultChatParticipant"
+  ],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "eduMonitor.assistant",
+        "name": "edu-assistant",
+        "description": "Trợ lý học tập có kiểm soát logic (Socratic)",
+        "isDefault": true,
+        "commands": [
+          {
+            "name": "explain",
+            "description": "Giải thích logic và khái niệm đoạn code"
+          },
+          {
+            "name": "debug",
+            "description": "Hỗ trợ tìm lỗi nhưng không sửa hộ"
+          }
+        ]
+      }
+    ],
     "commands": [
       {
         "command": "eduMonitor.toggleHighlight",
@@ -60,7 +81,7 @@
   },
   "devDependencies": {
     "@types/node": "20.x",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.90.0",
     "typescript": "5.4.5"
   }
 }

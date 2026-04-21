@@ -1,21 +1,10 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-/**
- * AI Gateway – proxy đến Gemini với:
- *   - Token quota management
- *   - Socratic Nudging (inject system prompt theo ai_level)
- *
- * POST /api/gateway/chat
- * GET  /api/gateway/quota
- */
 const router = require('express').Router();
 const { z } = require('zod');
 const { authenticate } = require('../middleware/auth');
 const { getRedis } = require('../lib/redis');
 const db = require('../lib/db');
 const gemini = require('../lib/gemini');
+const logger = require('../lib/logger');
 
 // Socratic system prompt theo AI level (L0-L5)
 const SOCRATIC_PROMPTS = {
@@ -30,11 +19,21 @@ const SOCRATIC_PROMPTS = {
 const ChatSchema = z.object({
 	messages: z.array(z.object({ role: z.string(), content: z.string() })).min(1),
 	session_id: z.string().uuid().optional(),
+	stream: z.boolean().optional().default(false),
 });
+
+/**
+ * Kiểm tra xem sinh viên có đang cố gắng lách luật (prompt injection) không.
+ */
+function checkGuardrails(messages) {
+	const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || '';
+	const forbiddenTokens = ['ignore', 'system prompt', 'instruction', 'quy tắc', 'bỏ qua'];
+	return forbiddenTokens.some(token => lastMessage.includes(token));
+}
 
 router.post('/chat', authenticate, async (req, res, next) => {
 	try {
-		const body = ChatSchema.parse(req.body);
+		const { messages: history, session_id, stream } = ChatSchema.parse(req.body);
 		const user = req.user;
 		const redis = getRedis();
 
@@ -45,36 +44,67 @@ router.post('/chat', authenticate, async (req, res, next) => {
 			return res.status(429).json({ error: 'Token quota exceeded for today' });
 		}
 
+		// ── Guardrails ────────────────────────────────────────────
+		if (checkGuardrails(history)) {
+			logger.warn(`Potential prompt injection detected from user ${user.id}`);
+			return res.status(400).json({ error: 'Câu hỏi vi phạm quy tắc an toàn sư phạm.' });
+		}
+
 		// ── Socratic Nudging ──────────────────────────────────────
 		const level = user.ai_level ?? 0;
-		const messages = [
+		const finalMessages = [
 			{ role: 'system', content: SOCRATIC_PROMPTS[level] || SOCRATIC_PROMPTS[0] },
-			...body.messages,
+			...history,
 		];
 
-		// ── Gọi Gemini ────────────────────────────────────────────
-		const { text, usage } = await gemini.chat(messages, { maxTokens: 1000, temperature: 0.7 });
+		if (stream) {
+			// ── Luồng Streaming (SSE) ────────────────────────────────
+			res.setHeader('Content-Type', 'text/event-stream');
+			res.setHeader('Cache-Control', 'no-cache');
+			res.setHeader('Connection', 'keep-alive');
 
-		// ── Cập nhật quota trong Redis ────────────────────────────
-		const ttl = 86400 - (Math.floor(Date.now() / 1000) % 86400);
-		await redis.incrby(quotaKey, usage.total);
-		await redis.expire(quotaKey, ttl);
+			const completion = await gemini.chat(finalMessages, { stream: true, maxTokens: 1000 });
+			let fullText = '';
 
-		// ── Ghi log vào DB ────────────────────────────────────────
-		await db.query(
-			`INSERT INTO ai_gateway_log
-         (user_id, session_id, model, prompt_tokens, completion_tokens, total_tokens, socratic_injected)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			[user.id, body.session_id || null, process.env.LLM_MODEL || 'llama-3.1-8b-instant',
-			usage.input, usage.output, usage.total, level < 5]
-		);
+			for await (const chunk of completion) {
+				const content = chunk.choices[0]?.delta?.content || '';
+				fullText += content;
+				if (content) {
+					res.write(`data: ${JSON.stringify({ content })}\n\n`);
+				}
+			}
 
-		res.json({
-			message: { role: 'assistant', content: text },
-			usage: { prompt_tokens: usage.input, completion_tokens: usage.output, total_tokens: usage.total },
-			ai_level: level,
-			socratic: level < 5,
-		});
+			// Ước tính token (thô sơ) cho session log
+			const estimatedTokens = Math.ceil(fullText.length / 4) + 100; // placeholder logic
+			await redis.incrby(quotaKey, estimatedTokens);
+			
+			// Ghi log (phần này có thể làm async)
+			db.query(
+				`INSERT INTO ai_gateway_log (user_id, session_id, model, prompt_tokens, completion_tokens, total_tokens, socratic_injected)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				[user.id, session_id || null, process.env.LLM_MODEL || 'llama-3.1-8b-instant', 0, 0, estimatedTokens, level < 5]
+			).catch(e => logger.error('Log error', e));
+
+			res.write('data: [DONE]\n\n');
+			return res.end();
+		} else {
+			// ── Luồng Normal ────────────────────────────────────────
+			const { text, usage } = await gemini.chat(finalMessages, { maxTokens: 1000 });
+
+			await redis.incrby(quotaKey, usage.total);
+			await db.query(
+				`INSERT INTO ai_gateway_log (user_id, session_id, model, prompt_tokens, completion_tokens, total_tokens, socratic_injected)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				[user.id, session_id || null, process.env.LLM_MODEL || 'llama-3.1-8b-instant', usage.input, usage.output, usage.total, level < 5]
+			);
+
+			return res.json({
+				message: { role: 'assistant', content: text },
+				usage,
+				socratic: level < 5,
+				ai_level: level,
+			});
+		}
 	} catch (err) {
 		next(err);
 	}
@@ -96,3 +126,4 @@ router.get('/quota', authenticate, async (req, res, next) => {
 });
 
 module.exports = router;
+

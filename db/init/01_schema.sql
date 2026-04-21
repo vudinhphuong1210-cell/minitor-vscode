@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     token_quota   INTEGER NOT NULL DEFAULT 10000,  -- token còn lại trong ngày
     quota_reset_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '1 day',
     hardware_fingerprint TEXT,                     -- Hardware fingerprinting
+    password_hash   TEXT,                          -- Hashed password (bcrypt)
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -93,7 +94,14 @@ CREATE TABLE IF NOT EXISTS ai_gateway_log (
 CREATE INDEX IF NOT EXISTS idx_ai_log_user ON ai_gateway_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_ai_log_time ON ai_gateway_log(created_at DESC);
 
--- ── Seed: tài khoản admin mặc định ──────────────────────────
-INSERT INTO users (email, display_name, role, ai_level)
-VALUES ('admin@edu.local', 'Administrator', 'admin', 5)
-ON CONFLICT (email) DO NOTHING;
+-- ── Seed: tài khoản mặc định (password: admin1234) ──────────
+INSERT INTO users (email, display_name, role, ai_level, password_hash)
+VALUES 
+    ('admin@edu.local', 'Administrator', 'admin', 5, '$2a$10$dy1YcPTWhxNhyzaB4kBfpeuqkbbRTjks01uHhwJ3iBHeFj5sbWjiu'),
+    ('student@edu.local', 'Mẫu Sinh Viên', 'student', 0, '$2a$10$dy1YcPTWhxNhyzaB4kBfpeuqkbbRTjks01uHhwJ3iBHeFj5sbWjiu'),
+    ('instructor@edu.local', 'Mẫu Giảng Viên', 'instructor', 0, '$2a$10$dy1YcPTWhxNhyzaB4kBfpeuqkbbRTjks01uHhwJ3iBHeFj5sbWjiu')
+ON CONFLICT (email) DO UPDATE SET 
+    password_hash = EXCLUDED.password_hash,
+    display_name = EXCLUDED.display_name,
+    role = EXCLUDED.role,
+    ai_level = EXCLUDED.ai_level;

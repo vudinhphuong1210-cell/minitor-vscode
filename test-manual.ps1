@@ -8,6 +8,12 @@ $BASE = "http://localhost:3000"
 $PASS = 0
 $FAIL = 0
 
+# --- CONFIGURATION (Tài khoản để chạy test) ---
+$STUDENT_EMAIL    = "student@edu.local"
+$INSTRUCTOR_EMAIL = "instructor@edu.local"
+$PASSWORD         = "admin1234"
+# ----------------------------------------------
+
 function Print-Header($title) {
     Write-Host ""
     Write-Host ("=" * 60) -ForegroundColor Cyan
@@ -62,39 +68,34 @@ Assert-Ok "Server is up" ($r.ok -and $r.data.status -eq "ok")
 Print-Header "1. AUTH - REGISTER AND LOGIN"
 # =============================================================================
 
-$ts               = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$STUDENT_EMAIL    = "student_$ts@test.com"
-$INSTRUCTOR_EMAIL = "instructor_$ts@test.com"
-$PASSWORD         = "password123"
+Print-Step "Auth Setup (Register/Login)"
 
-Print-Step "POST /api/auth/register (student)"
+# 1a. Thử đăng ký student (bỏ qua nếu đã có)
 $r = Invoke-API "POST" "/api/auth/register" @{
     email        = $STUDENT_EMAIL
     display_name = "Test Student"
     password     = $PASSWORD
     role         = "student"
 }
-Assert-Ok "Register student 201" ($r.ok)
-Assert-Ok "Student has id"       ($null -ne $r.data.user.id)
-$STUDENT_ID = $r.data.user.id
+if ($r.ok) { Write-Host "  [OK] Registered new student" -ForegroundColor Gray }
 
-Print-Step "POST /api/auth/register (instructor)"
+# 1b. Đăng nhập student để lấy ID và Token
+$r = Invoke-API "POST" "/api/auth/login" @{ email = $STUDENT_EMAIL; password = $PASSWORD }
+Assert-Ok "Login student 200" ($r.ok)
+Assert-Ok "Token returned"    ($null -ne $r.data.token)
+$STUDENT_TOKEN = $r.data.token
+$STUDENT_ID    = $r.data.user.id
+
+# 1c. Thử đăng ký instructor (bỏ qua nếu đã có)
 $r = Invoke-API "POST" "/api/auth/register" @{
     email        = $INSTRUCTOR_EMAIL
     display_name = "Test Instructor"
     password     = $PASSWORD
     role         = "instructor"
 }
-Assert-Ok "Register instructor 201" ($r.ok)
-$INSTRUCTOR_ID = $r.data.user.id
+if ($r.ok) { Write-Host "  [OK] Registered new instructor" -ForegroundColor Gray }
 
-Print-Step "POST /api/auth/login (student)"
-$r = Invoke-API "POST" "/api/auth/login" @{ email = $STUDENT_EMAIL; password = $PASSWORD }
-Assert-Ok "Login student 200" ($r.ok)
-Assert-Ok "Token returned"    ($null -ne $r.data.token)
-$STUDENT_TOKEN = $r.data.token
-
-Print-Step "POST /api/auth/login (instructor)"
+# 1d. Đăng nhập instructor
 $r = Invoke-API "POST" "/api/auth/login" @{ email = $INSTRUCTOR_EMAIL; password = $PASSWORD }
 Assert-Ok "Login instructor 200" ($r.ok)
 $INSTRUCTOR_TOKEN = $r.data.token

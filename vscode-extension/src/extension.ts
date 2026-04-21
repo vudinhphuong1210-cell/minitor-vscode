@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
 import { HighlightController } from './highlightController';
 import { EventCollector } from './eventCollector';
 import { EduStatusBar } from './statusBar';
+
+import { registerChatParticipant } from './chatParticipant';
 
 let controller: HighlightController | undefined;
 let collector: EventCollector | undefined;
@@ -26,6 +28,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	collector = new EventCollector(sessionId, serverUrl, batchIntervalMs);
 	controller = new HighlightController(collector, enabled, highlightEnabled);
 	statusBar = new EduStatusBar();
+
+	// Đăng ký Chat Participant
+	registerChatParticipant(context, serverUrl, token);
 
 	// ── Helper: thực hiện login ───────────────────────────────
 	async function doLogin(): Promise<boolean> {

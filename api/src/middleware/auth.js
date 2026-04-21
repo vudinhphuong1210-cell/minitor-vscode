@@ -8,7 +8,7 @@ const db = require('../lib/db');
 async function authenticate(req, res, next) {
 	const header = req.headers.authorization;
 	if (!header || !header.startsWith('Bearer ')) {
-		return res.status(401).json({ error: 'Missing token' });
+		return res.status(401).json({ error: 'Missing or invalid token format' });
 	}
 
 	const token = header.slice(7);
@@ -18,11 +18,13 @@ async function authenticate(req, res, next) {
 			'SELECT id, email, role, ai_level, token_quota FROM users WHERE id = $1',
 			[decoded.sub]
 		);
-		if (!rows.length) return res.status(401).json({ error: 'User not found' });
+		if (!rows.length) {
+			return res.status(401).json({ error: 'User not found' });
+		}
 		req.user = rows[0];
 		next();
-	} catch {
-		return res.status(401).json({ error: 'Invalid token' });
+	} catch (err) {
+		return res.status(401).json({ error: 'Invalid or expired token' });
 	}
 }
 

@@ -27,15 +27,11 @@ router.post('/register', async (req, res, next) => {
 		const hash = await bcrypt.hash(body.password, 12);
 
 		const { rows } = await db.query(
-			`INSERT INTO users (email, display_name, role)
-       VALUES ($1, $2, $3)
+			`INSERT INTO users (email, display_name, role, password_hash)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, email, display_name, role`,
-			[body.email, body.display_name, body.role]
+			[body.email, body.display_name, body.role, hash]
 		);
-
-		// Lưu password hash vào bảng riêng (đơn giản hoá: thêm cột)
-		await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT');
-		await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, rows[0].id]);
 
 		res.status(201).json({ user: rows[0] });
 	} catch (err) {
